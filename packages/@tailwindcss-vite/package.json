@@ -30,13 +30,16 @@
   "dependencies": {
     "@tailwindcss/oxide": "workspace:^",
     "lightningcss": "catalog:",
+    "postcss": "^8.4.41",
+    "postcss-import": "^16.1.0",
     "postcss-load-config": "^6.0.1",
     "tailwindcss": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "vite": "catalog:",
-    "internal-postcss-fix-relative-paths": "workspace:^"
+    "@types/postcss-import": "^14.0.3",
+    "internal-postcss-fix-relative-paths": "workspace:^",
+    "vite": "catalog:"
   },
   "peerDependencies": {
     "vite": "^5.2.0"

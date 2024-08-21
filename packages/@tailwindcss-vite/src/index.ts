@@ -1,7 +1,10 @@
 import { Scanner } from '@tailwindcss/oxide'
 import fixRelativePathsPlugin, { normalizePath } from 'internal-postcss-fix-relative-paths'
 import { Features, transform } from 'lightningcss'
+import fs from 'node:fs/promises'
 import path from 'path'
+import postcss from 'postcss'
+import postcssImport from 'postcss-import'
 import postcssrc from 'postcss-load-config'
 import { compile } from 'tailwindcss'
 import type { Plugin, ResolvedConfig, Rollup, Update, ViteDevServer } from 'vite'
@@ -80,6 +83,22 @@ export default function tailwindcss(): Plugin[] {
 
   async function generateCss(css: string, inputPath: string, addWatchFile: (file: string) => void) {
     let inputBasePath = path.dirname(path.resolve(inputPath))
+
+    // Resolve `@import`s
+    let postcssCompiled = await postcss([
+      postcssImport({
+        load(path) {
+          addWatchFile(path)
+          return fs.readFile(path, 'utf8')
+        },
+      }),
+      fixRelativePathsPlugin(),
+    ]).process(css, {
+      from: inputPath,
+      to: inputPath,
+    })
+    css = postcssCompiled.css
+
     let { build, globs } = await compile(css, {
       loadPlugin: async (pluginPath) => {
         if (pluginPath[0] === '.') {
@@ -266,6 +285,7 @@ export default function tailwindcss(): Plugin[] {
 
       // Scan all non-CSS files for candidates
       transform(src, id, options) {
+        console.log('FIRST TRANSFORM', id)
         if (id.includes('/.vite/')) return
         let extension = getExtension(id)
         if (extension === '' || extension === 'css') return
@@ -275,15 +295,11 @@ export default function tailwindcss(): Plugin[] {
       },
     },
 
-    /*
-     * The plugins that generate CSS must run after 'enforce: pre' so @imports
-     * are expanded in transform.
-     */
-
     {
       // Step 2 (serve mode): Generate CSS
       name: '@tailwindcss/vite:generate:serve',
       apply: 'serve',
+      enforce: 'pre',
 
       async transform(src, id, options) {
         if (!isTailwindCssFile(id, src)) return
@@ -297,6 +313,7 @@ export default function tailwindcss(): Plugin[] {
           // during SSR or it will block the server.
           await server?.waitForRequestsIdle?.(id)
         }
+        console.log('LAST TRANSFORM', id)
 
         let code = await transformWithPlugins(
           this,
@@ -311,6 +328,7 @@ export default function tailwindcss(): Plugin[] {
       // Step 2 (full build): Generate CSS
       name: '@tailwindcss/vite:generate:build',
       apply: 'build',
+      enforce: 'pre',
 
       transform(src, id) {
         if (!isTailwindCssFile(id, src)) return
@@ -348,7 +366,7 @@ function getExtension(id: string) {
 function isTailwindCssFile(id: string, src: string) {
   let extension = getExtension(id)
   let isCssFile = extension === 'css' || (extension === 'vue' && id.includes('&lang.css'))
-  return isCssFile && src.includes('@tailwind')
+  return isCssFile
 }
 
 function optimizeCss(
